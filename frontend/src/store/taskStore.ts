@@ -2,10 +2,22 @@ import { create } from 'zustand';
 import type { Task, Message, WSMessage } from '../types';
 import * as api from '../api/client';
 
+interface AgentStep {
+  agent_name: string;
+  status: 'working' | 'done' | 'pending';
+  content: string;
+}
+
+interface AgentPlan {
+  agents: string[];
+  steps: AgentStep[];
+}
+
 interface TaskStore {
   tasks: Task[];
   activeTaskId: string | null;
   messages: Record<string, Message[]>;
+  agentPlans: Record<string, AgentPlan>;   // task_id -> live agent plan state
   connected: boolean;
   connect: () => void;
   disconnect: () => void;
@@ -24,6 +36,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
   activeTaskId: null,
   messages: {},
+  agentPlans: {},
   connected: false,
 
   connect: () => {
@@ -61,6 +74,37 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 [data.task_id]: state.messages[data.task_id] || [],
               },
             }));
+            break;
+          }
+
+          case 'agent_plan': {
+            set((state) => ({
+              agentPlans: {
+                ...state.agentPlans,
+                [data.task_id]: { agents: data.agents, steps: [] },
+              },
+            }));
+            break;
+          }
+
+          case 'agent_step': {
+            set((state) => {
+              const plan = state.agentPlans[data.task_id];
+              if (!plan) return {};
+              const existing = plan.steps.filter((s) => s.agent_name !== data.agent_name);
+              return {
+                agentPlans: {
+                  ...state.agentPlans,
+                  [data.task_id]: {
+                    ...plan,
+                    steps: [
+                      ...existing,
+                      { agent_name: data.agent_name, status: data.status, content: data.content },
+                    ],
+                  },
+                },
+              };
+            });
             break;
           }
 
@@ -129,6 +173,45 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                   : t,
               ),
             }));
+            break;
+          }
+
+          case 'genie_thinking': {
+            // Upsert a single "thinking" placeholder that updates in place
+            const thinkingId = `thinking_${data.task_id}`;
+            const thinkingMsg: Message = {
+              message_id: thinkingId,
+              task_id: data.task_id,
+              role: 'thinking',
+              content: data.content,
+              agent_name: 'genie',
+              created_at: new Date().toISOString(),
+              metadata: null,
+            };
+            set((state) => {
+              const existing = state.messages[data.task_id] ?? [];
+              const filtered = existing.filter((m) => m.message_id !== thinkingId);
+              return { messages: { ...state.messages, [data.task_id]: [...filtered, thinkingMsg] } };
+            });
+            break;
+          }
+
+          case 'genie_response': {
+            const thinkingId = `thinking_${data.task_id}`;
+            const responseMsg: Message = {
+              message_id: crypto.randomUUID(),
+              task_id: data.task_id,
+              role: 'assistant',
+              content: data.content,
+              agent_name: 'genie',
+              created_at: new Date().toISOString(),
+              metadata: data.query_result ? { query_result: data.query_result } : null,
+            };
+            set((state) => {
+              const existing = state.messages[data.task_id] ?? [];
+              const filtered = existing.filter((m) => m.message_id !== thinkingId);
+              return { messages: { ...state.messages, [data.task_id]: [...filtered, responseMsg] } };
+            });
             break;
           }
         }

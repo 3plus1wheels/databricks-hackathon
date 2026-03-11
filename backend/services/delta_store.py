@@ -22,7 +22,16 @@ _messages: dict[str, list[Message]] = {}  # keyed by task_id
 
 
 def _use_databricks() -> bool:
-    return bool(config.DATABRICKS_HOST and config.DATABRICKS_TOKEN and config.DATABRICKS_WAREHOUSE_ID)
+    """Return True only when real (non-placeholder) credentials are present."""
+    placeholders = {"your-warehouse-id", "your-token-here", "your-workspace.cloud.databricks.com"}
+    host = config.DATABRICKS_HOST
+    token = config.DATABRICKS_TOKEN
+    wh_id = config.DATABRICKS_WAREHOUSE_ID
+    if not (host and token and wh_id):
+        return False
+    if any(p in v for p in placeholders for v in (host, token, wh_id)):
+        return False
+    return True
 
 
 def _conn():
