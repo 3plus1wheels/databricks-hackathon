@@ -1,0 +1,17 @@
+[project]
+name = "workbench-backend"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "websockets>=15",
+    "databricks-sdk>=0.40",
+    "databricks-sql-connector>=3",
+    "python-dotenv>=1",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "httpx>=0.28",
+]
