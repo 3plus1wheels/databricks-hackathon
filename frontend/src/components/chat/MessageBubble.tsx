@@ -46,9 +46,9 @@ export default function MessageBubble({ message }: { message: Message }) {
   if (message.role === 'thinking') {
     return (
       <div className="my-2 flex items-start gap-2">
-        <AgentAvatar name="genie" />
+        <AgentAvatar name="analyst" />
         <div className="max-w-[70%]">
-          <span className="mb-0.5 block text-xs font-medium text-gray-400">genie</span>
+          <span className="mb-0.5 block text-xs font-medium text-gray-400">analyst</span>
           <div className="rounded-2xl rounded-bl-md bg-gray-800 px-4 py-2.5 text-sm text-gray-500 italic">
             {message.content}&hellip;
           </div>

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import tasks, chat
+from routers import tasks, chat, genie
 
 app = FastAPI(title="Workbench API")
 
@@ -14,6 +14,7 @@ app.add_middleware(
 )
 
 app.include_router(tasks.router, prefix="/api")
+app.include_router(genie.router, prefix="/api")
 app.include_router(chat.router)
 
 

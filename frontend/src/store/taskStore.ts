@@ -184,7 +184,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
               task_id: data.task_id,
               role: 'thinking',
               content: data.content,
-              agent_name: 'genie',
+              agent_name: 'analyst',
               created_at: new Date().toISOString(),
               metadata: null,
             };
@@ -203,7 +203,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
               task_id: data.task_id,
               role: 'assistant',
               content: data.content,
-              agent_name: 'genie',
+              agent_name: 'analyst',
               created_at: new Date().toISOString(),
               metadata: data.query_result ? { query_result: data.query_result } : null,
             };

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import AsyncGenerator
 
 import config
@@ -24,23 +25,85 @@ class GenieChat:
         return self._client
 
     def is_configured(self) -> bool:
-        return bool(config.DATABRICKS_HOST and config.DATABRICKS_TOKEN and config.GENIE_SPACE_ID)
+        """Only HOST + TOKEN are required; analyze commands provide the space name."""
+        placeholders = {"your-token-here", "your-workspace.cloud.databricks.com"}
+        return bool(
+            config.DATABRICKS_HOST and config.DATABRICKS_TOKEN
+            and not any(p in v for p in placeholders for v in (config.DATABRICKS_HOST, config.DATABRICKS_TOKEN))
+        )
 
-    async def chat(self, message: str, task_id: str) -> AsyncGenerator[dict, None]:
+    def _normalize_space_name(self, value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+
+    async def _resolve_space_id(self, space_name: str | None) -> tuple[str | None, str | None]:
+        if not space_name:
+            if config.GENIE_SPACE_ID:
+                return config.GENIE_SPACE_ID, None
+            return None, "No Genie space resolved. Use analyze:space_name before your prompt."
+
+        requested_raw = space_name.strip().lower()
+        requested_normalized = self._normalize_space_name(space_name)
+
+        if config.GENIE_SPACE_ID and requested_raw in {
+            "default",
+            config.GENIE_SPACE_ID.strip().lower(),
+            self._normalize_space_name(config.GENIE_SPACE_ID),
+        }:
+            return config.GENIE_SPACE_ID, None
+
+        if not self.is_configured():
+            return None, None
+
+        resp = await asyncio.to_thread(self.client.genie.list_spaces)
+        spaces = getattr(resp, "spaces", None) or []
+        for space in spaces:
+            candidates = {
+                (space.space_id or "").strip().lower(),
+                (space.title or "").strip().lower(),
+                self._normalize_space_name(space.space_id or ""),
+                self._normalize_space_name(space.title or ""),
+            }
+            if requested_raw in candidates or requested_normalized in candidates:
+                return space.space_id, None
+
+        available = sorted(
+            {
+                self._normalize_space_name(space.title or space.space_id or "")
+                for space in spaces
+                if (space.title or space.space_id)
+            }
+        )
+        if available:
+            joined = ", ".join(available[:8])
+            return None, f"Unknown Genie space '{space_name}'. Use analyze:space_name with one of: {joined}"
+
+        return None, f"Unknown Genie space '{space_name}'. No spaces were returned from Databricks."
+
+    async def chat(self, message: str, task_id: str, space_name: str | None = None) -> AsyncGenerator[dict, None]:
         """Send a message to Genie, stream thinking status, then yield the final response."""
         if not self.is_configured():
             yield {
                 "type": "genie_response",
                 "content": (
-                    "Genie is not connected. Add DATABRICKS_HOST, DATABRICKS_TOKEN, "
-                    "and GENIE_SPACE_ID to backend/.env to enable it."
+                    "Genie is not connected. Add DATABRICKS_HOST and DATABRICKS_TOKEN "
+                    "to backend/.env to enable it."
                 ),
             }
             return
 
+        resolved_space, resolution_error = await self._resolve_space_id(space_name)
+        if resolution_error:
+            yield {
+                "type": "genie_response",
+                "content": resolution_error,
+            }
+            return
+
         try:
-            space_id = config.GENIE_SPACE_ID
-            conv_id = self._conversations.get(task_id)
+            space_id = resolved_space
+            # Key conversations by (task_id, space_id) so switching spaces starts fresh
+            conv_key = f"{task_id}:{space_id}"
+            conv_id = self._conversations.get(conv_key)
 
             if conv_id is None:
                 # New conversation
@@ -51,7 +114,7 @@ class GenieChat:
                 )
                 conv_id = wait.response.conversation_id
                 message_id = wait.response.message_id
-                self._conversations[task_id] = conv_id
+                self._conversations[conv_key] = conv_id
             else:
                 # Continue existing conversation
                 wait = await asyncio.to_thread(

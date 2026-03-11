@@ -17,9 +17,9 @@ export default function ChatView() {
         {!activeTaskId || messages.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-gray-500">
             <MessageSquare size={48} strokeWidth={1.5} />
-            <p className="text-lg font-medium">Ask Genie anything</p>
+            <p className="text-lg font-medium">Run work or analysis</p>
             <p className="text-sm text-gray-600">
-              Chat normally, or start with <code className="rounded bg-gray-800 px-1.5 py-0.5 text-blue-400">do:</code> to run agents on a task
+              Start with <code className="rounded bg-gray-800 px-1.5 py-0.5 text-blue-400">do:</code> for agent execution or <code className="rounded bg-gray-800 px-1.5 py-0.5 text-emerald-400">analyze:space_name</code> for Genie prompts
             </p>
           </div>
         ) : (
